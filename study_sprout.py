@@ -212,7 +212,6 @@ def print_stats(file_path: str, real: bool = False):
     scores = sorted(calc_scores(parsed['subjects']), key=lambda x: x[1])
 
     max_len = max(map(lambda x: len(x[0]), scores))
-    print(parsed['subjects'])
     max_hours = max(map(lambda x: x[1]['hours'], parsed['subjects'].items()))
     max_hours_digits = floor(log10(max(max_hours, 1)) + 1) + 4
 
