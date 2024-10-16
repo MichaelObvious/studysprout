@@ -73,7 +73,7 @@ def parse(content: str, real_timings: bool) -> dict:
         if not (date_key in studied_per_day):
             studied_per_day[date_key] = 0.0
         studied_per_day[date_key] += hours
-        
+
         if (today - date).days == 0:
             studied_today += hours
 
@@ -85,17 +85,17 @@ def parse(content: str, real_timings: bool) -> dict:
 
     studied_per_day = list(map(lambda x: (datetime.strptime(
         x[0], "%d/%m/%Y"), x[1]), studied_per_day.items()))
-    
+
     dates = list(map(lambda x: x[0], studied_per_day))
     min_date = min(dates)
-    
+
     for i in range((today-min_date).days+1):
-        d = min_date + timedelta(days = i)
+        d = min_date + timedelta(days=i)
         if not d in dates:
             studied_per_day.append((d, 0.0))
 
     studied_per_day = sorted(studied_per_day, key=lambda x: x[0])
-    
+
     return {'subjects': subjects, 'total': total, 'today': studied_today, 'daily': studied_per_day}
 
 
@@ -128,8 +128,8 @@ def format_time(t: float, show_secs: bool = False) -> str:
         mins = floor(mins)
     else:
         mins = round(mins)
-    secs = floor((t*60 - mins)*60.0)
-    return f"{int(t)}:{mins:02}" + (f":{secs:02}" if show_secs else '')
+    secs = floor(((t - floor(t))*60 - mins)*60.0)
+    return f"{floor(t)}:{mins:02}" + (f":{secs:02}" if show_secs else '')
 
 
 def print_next_subject(file_path: str):
@@ -137,7 +137,8 @@ def print_next_subject(file_path: str):
     parsed = parse(content, False)
 
     # print("---")
-    print(f"Studied today: {format_time(parsed['today'])} ({parsed['today']:.2f}h)")
+    print(f"Studied today: {format_time(
+        parsed['today'])} ({parsed['today']:.2f}h)")
     next_subject = get_next_subject(parsed['subjects'])
     print(f"Your next subject should be: '{italic(next_subject)}'")
 
@@ -202,7 +203,8 @@ def add_study_time(file_path):
 
     print()
     print("Successfully added study session!")
-    print(f"Studied {format_time(parsed['today'] + amount*CLEVELS_LIST[confidence_idx][1])} today!")
+    print(f"Studied {format_time(
+        parsed['today'] + amount*CLEVELS_LIST[confidence_idx][1])} today!")
 
 
 def print_stats(file_path: str, real: bool = False):
@@ -404,7 +406,8 @@ def record_time(file_path: str):
 
     print()
     print("Successfully added study session!")
-    print(f"Studied {format_time(parsed['today'] + amount*CLEVELS_LIST[confidence_idx][1])} today!")
+    print(f"Studied {format_time(
+        parsed['today'] + amount*CLEVELS_LIST[confidence_idx][1])} today!")
 
 
 def print_history(file_path: str, n: int, real: bool = False):
@@ -425,7 +428,8 @@ def print_history(file_path: str, n: int, real: bool = False):
         # to_print = f"\033[7m\033[1m{to_print[:n_chars]}\033[0m{to_print[n_chars:]}\033[0m"
         progress_bar = "[\033[0m" + "="*n_chars + \
             "\033[0m" + " "*(BAR_LENGTH-n_chars) + "]"
-        print(f"{wd.ljust(max_wd_len)} {d.ljust(max_d_len)}: {progress_bar}  {ft} ({dt.rjust(max_dt_len)})")
+        print(f"{wd.ljust(max_wd_len)} {d.ljust(max_d_len)}: {
+              progress_bar}  {ft} ({dt.rjust(max_dt_len)})")
 
 
 def main():
@@ -436,7 +440,7 @@ def main():
         print_help(program)
         return
     filepath, argv = shift(argv)
-    
+
     real = '--real' in argv
 
     option = "next"
