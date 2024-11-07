@@ -128,8 +128,12 @@ def format_time(t: float, show_secs: bool = False) -> str:
         mins = floor(mins)
     else:
         mins = round(mins)
+    h = floor(t)
+    if mins == 60:
+        h += 1
+        mins = 0
     secs = floor(((t - floor(t))*60 - mins)*60.0)
-    return f"{floor(t)}:{mins:02}" + (f":{secs:02}" if show_secs else '')
+    return f"{h}:{mins:02}" + (f":{secs:02}" if show_secs else '')
 
 
 def print_next_subject(file_path: str):
@@ -206,6 +210,7 @@ def add_study_time(file_path):
     print(f"Studied {format_time(
         parsed['today'] + amount*CLEVELS_LIST[confidence_idx][1])} today!")
 
+float_len = lambda x: floor(log10(max(x, 1)) + 1) + 3
 
 def print_stats(file_path: str, real: bool = False):
     print()
@@ -215,7 +220,7 @@ def print_stats(file_path: str, real: bool = False):
 
     max_len = max(map(lambda x: len(x[0]), scores))
     max_hours = max(map(lambda x: x[1]['hours'], parsed['subjects'].items()))
-    max_hours_digits = floor(log10(max(max_hours, 1)) + 1) + 4
+    max_hours_digits = float_len(max_hours)
 
     min_score = min(dict(scores).values())
     padding = (1.0 - min_score) / 10.0
@@ -225,7 +230,7 @@ def print_stats(file_path: str, real: bool = False):
     print("\033[1m=== Subjects ===\033[0m")
     for (sub, sc) in scores:
         h = parsed['subjects'][sub]['hours']
-        hours = f"{h:.2f}h".ljust(max_hours_digits)
+        hours = f"{h:.2f}h".ljust(max_hours_digits+1)
         sub = (sub + ": ").ljust(max_len+5, '.')
         sc_str = f"{sc:.2f}".ljust(4, '0')
         n_chars = round(
@@ -260,6 +265,7 @@ def print_stats(file_path: str, real: bool = False):
         ("Today", studied_today),
     ]
     max_title_len = max(map(lambda x: len(x[0]), stats))
+    max_hours_digits = float_len(max(map(lambda x: x[1], stats)))
 
     for (title, amount) in stats:
         stitle = (title+":").ljust(max_title_len + 1)
