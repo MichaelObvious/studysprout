@@ -17,11 +17,13 @@ BAR_LENGTH = 20
 def print_help(program: str):
     print(f"Usage: {program} <path/to/file.csv> <option>")
     print("Options:")
-    print("    help      prints this message and exits")
-    print("    add       to register study time in database")
-    print("    next      (default) prints next suggested study subject")
-    print("    stats     prints some stats")
-    print("    record    record study session duration")
+    print("    help          Prints this message and exits")
+    print("    add           Register study session in database")
+    print("    history [n]   Print graph with amout of study for the last")
+    print("                  n days (default n = 7).")
+    print("    next          (default) Print next suggested study subject")
+    print("    stats         Print some statistics")
+    print("    record        Record study session duration")
 
 
 def lev(s1: str, s2: str) -> int:
