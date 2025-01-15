@@ -17,10 +17,30 @@ BAR_LENGTH = 20
 def print_help(program: str):
     print(f"Usage: {program} <path/to/file.csv> <option>")
     print("Options:")
-    print("    add     to register study time")
-    print("    next    (default) prints next study hour")
-    print("    stats   prints some stats")
-    print("    record  record time")
+    print("    help      prints this message and exits")
+    print("    add       to register study time in database")
+    print("    next      (default) prints next suggested study subject")
+    print("    stats     prints some stats")
+    print("    record    record study session duration")
+
+
+def lev(s1: str, s2: str) -> int:
+    if len(s1) < len(s2):
+        return lev(s2, s1)
+
+    # Initialize the distance matrix
+    distances = range(len(s2) + 1)
+
+    for i, c1 in enumerate(s1):
+        new_distances = [i + 1]
+        for j, c2 in enumerate(s2):
+            if c1 == c2:
+                new_distances.append(distances[j])
+            else:
+                new_distances.append(min(distances[j], distances[j + 1], new_distances[-1]) + 1)
+        distances = new_distances
+
+    return distances[-1]
 
 
 def shift(x): return (x[0], x[1:])
@@ -45,6 +65,15 @@ def parse_time(s: str) -> float:
     return hours
 
 
+def parse_date_or_none(s: str) -> datetime:
+    date = None
+    try:
+        date = datetime.strptime(s, "%d/%m/%Y")
+    except:
+        return None
+    return date
+
+
 def parse(content: str, real_timings: bool) -> dict:
     data = json.loads(content)
 
@@ -54,11 +83,14 @@ def parse(content: str, real_timings: bool) -> dict:
     total = 0.0
 
     subjects = dict(map(lambda x: (
-        x[0], {'credits': x[1], 'hours': 0, 'score': 0}), data['subjects'].items()))
+        x[0], {'credits': x[1]['weight'], 'due': parse_date_or_none(x[1]['due']), 'hours': 0, 'score': 0}), data['subjects'].items()))
 
+    first_date = datetime.fromtimestamp(100_000_000_000)
     for session in data['sessions']:
         subject = session['subject']
         date = datetime.strptime(session['date'], "%d/%m/%Y")
+
+        first_date = min(date, first_date)
 
         hours = session['duration']
         orig_hours = hours
@@ -80,14 +112,28 @@ def parse(content: str, real_timings: bool) -> dict:
         subjects[subject]['hours'] += hours
         subjects[subject]['score'] += orig_hours * confidence
 
+    max_available_time = max([1] + list(map(lambda x: (x-first_date).days + 1, filter(lambda x: x != None, map(lambda x: x['due'], subjects.values())))))
+    all_dates = list(map(lambda x: x['due'], subjects.values()))
     for s in subjects:
         subjects[s]['score'] /= subjects[s]['credits']
+        if subjects[s]['due'] != None:
+            if (subjects[s]['due'] - datetime.now()).days < 0:
+                subjects[s]['score'] *= -1
+            else:
+                first_study_day = min(map(lambda x: datetime.strptime(x['date'], "%d/%m/%Y"), filter(lambda x: x['subject'] == s, data['sessions'])))
+                occupied_before = len(list(filter(lambda x: x <= subjects[s]['due'] and x >= today, all_dates)))
+                days_to_exam = (subjects[s]['due'] - today).days + 1
+                free_days_to_exam = max(0, days_to_exam - occupied_before)
+                # print(s, free_days_to_exam)
+                subjects[s]['score'] *= free_days_to_exam
+        else:
+            subjects[s]['score'] /= max_available_time
 
     studied_per_day = list(map(lambda x: (datetime.strptime(
         x[0], "%d/%m/%Y"), x[1]), studied_per_day.items()))
 
     dates = list(map(lambda x: x[0], studied_per_day))
-    min_date = min(dates)
+    min_date = min(dates + [today])
 
     for i in range((today-min_date).days+1):
         d = min_date + timedelta(days=i)
@@ -107,6 +153,8 @@ def get_next_subject(subjects: dict) -> str:
 def calc_scores(subjects: dict) -> list:
     scores = list(map(lambda x: (x[0], x[1]['score']), subjects.items()))
     max_score = max(map(lambda x: x[1], scores))
+    if max_score == 0:
+        max_score = 1
     # avg_score = sum(map(lambda x: x[1], scores)) / len(items)
     scores = list(map(lambda x: (x[0], x[1]/max_score), scores))
     scores = sorted(scores, key=lambda x: x[1], reverse=True)
@@ -210,7 +258,9 @@ def add_study_time(file_path):
     print(f"Studied {format_time(
         parsed['today'] + amount*CLEVELS_LIST[confidence_idx][1])} today!")
 
-float_len = lambda x: floor(log10(max(x, 1)) + 1) + 3
+
+def float_len(x): return floor(log10(max(x, 1)) + 1) + 3
+
 
 def print_stats(file_path: str, real: bool = False):
     print()
@@ -223,12 +273,15 @@ def print_stats(file_path: str, real: bool = False):
     max_hours_digits = float_len(max_hours)
 
     min_score = min(dict(scores).values())
+    max_score = max(dict(scores).values())
     padding = (1.0 - min_score) / 10.0
     (interval_min, interval_max) = (0, 1)  # (min_score-padding, 1.0)
-    display_power = 2
+    display_power = 2 if (max_score - min_score) < 0.75 else 1
 
-    print("\033[1m=== Subjects ===\033[0m")
+    print("  \033[1m=== Subjects ===\033[0m")
     for (sub, sc) in scores:
+        if sc < 0:
+            continue
         h = parsed['subjects'][sub]['hours']
         hours = f"{h:.2f}h".ljust(max_hours_digits+1)
         sub = (sub + ": ").ljust(max_len+5, '.')
@@ -242,7 +295,7 @@ def print_stats(file_path: str, real: bool = False):
         print(to_print)
 
     print()
-    print("\033[1m=== Time ===\033[0m")
+    print("  \033[1m=== Time ===\033[0m")
 
     # print(parsed['daily'])
     last_days_average = 0.0
@@ -421,7 +474,8 @@ def print_history(file_path: str, n: int, real: bool = False):
     # data = json.loads(content)
     parsed = parse(content, real)
 
-    days = parsed['daily'][len(parsed['daily']) - n: len(parsed['daily'])]
+    start_idx = max(len(parsed['daily']) - n, 0)
+    days = parsed['daily'][start_idx:]
     max_t = max(map(lambda x: x[1], days))
     days = list(map(lambda x: (x[0].strftime("%A"), x[0].strftime(
         "%d/%m"), format_time(x[1]), f"{x[1]:.2f}", x[1]), days))
@@ -438,6 +492,9 @@ def print_history(file_path: str, n: int, real: bool = False):
               progress_bar}  {ft} ({dt.rjust(max_dt_len)})")
 
 
+
+
+
 def main():
     program, argv = shift(sys.argv)
 
@@ -452,6 +509,10 @@ def main():
     option = "next"
     if len(argv) > 0:
         option, argv = shift(argv)
+        
+    print(bold(f"===== {datetime.now().strftime('%d/%m/%y - %H:%M')} ====="))
+    
+    subcommands = ["add", "help", "history", "next", "record", "stats"]
 
     match option:
         case "add":
@@ -468,8 +529,15 @@ def main():
             record_time(filepath)
         case "stats":
             print_stats(filepath, real=real)
-        case x:
-            print(f"ERROR: Unknown argument `{x}`")
+        case "help":
+            print_help(program)
+        case sc:
+            xs = list(sorted(filter(lambda x: x[1] < max(map(len, subcommands)), map(lambda x: (x, lev(sc, x)), subcommands)), key=lambda x: x[1]))
+            
+            print(f"ERROR: Unknown subcommand `{sc}`."
+                  + (f" Maybe you meant `{italic(xs[0][0])}`?" if len(xs) > 0 else "")
+            )
+            print("Use subcommand `help` to get the full list of subcommands.")
             return
 
 
