@@ -534,7 +534,7 @@ def main():
         case "help":
             print_help(program)
         case sc:
-            xs = list(sorted(filter(lambda x: x[1] < max(map(len, subcommands)), map(lambda x: (x, lev(sc, x)), subcommands)), key=lambda x: x[1]))
+            xs = list(sorted(filter(lambda x: x[1] < min(map(len, subcommands)), map(lambda x: (x, lev(sc, x)), subcommands)), key=lambda x: x[1]))
             
             print(f"ERROR: Unknown subcommand `{sc}`."
                   + (f" Maybe you meant `{italic(xs[0][0])}`?" if len(xs) > 0 else "")
