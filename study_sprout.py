@@ -1,7 +1,7 @@
 #!/usr/bin/python3
-from math import floor, log10, ceil
+from math import exp, floor, log, log10, ceil
 import sys
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 import json
 import threading
 from time import time, sleep
@@ -67,32 +67,32 @@ def parse_time(s: str) -> float:
     return hours
 
 
-def parse_date_or_none(s: str) -> datetime:
-    date = None
+def parse_date_or_none(s: str) -> date:
+    d = None
     try:
-        date = datetime.strptime(s, "%d/%m/%Y")
+        d = datetime.strptime(s, "%d/%m/%Y").date()
     except:
         return None
-    return date
+    return d
 
 
 def parse(content: str, real_timings: bool) -> dict:
     data = json.loads(content)
 
     studied_per_day = {}
-    today = datetime.today()
+    today = date.today()
     studied_today = 0.0
     total = 0.0
 
     subjects = dict(map(lambda x: (
         x[0], {'credits': x[1]['weight'], 'due': parse_date_or_none(x[1]['due']), 'hours': 0, 'score': 0}), data['subjects'].items()))
 
-    first_date = datetime.fromtimestamp(100_000_000_000)
+    first_date = date.fromtimestamp(100_000_000_000)
     for session in data['sessions']:
         subject = session['subject']
-        date = datetime.strptime(session['date'], "%d/%m/%Y")
+        date_ = datetime.strptime(session['date'], "%d/%m/%Y").date()
 
-        first_date = min(date, first_date)
+        first_date = min(date_, first_date)
 
         hours = session['duration']
         orig_hours = hours
@@ -103,12 +103,12 @@ def parse(content: str, real_timings: bool) -> dict:
         # if confidence == 0.0:
         #     hours = 0.0
 
-        date_key = date.strftime("%d/%m/%Y")
+        date_key = date_.strftime("%d/%m/%Y")
         if not (date_key in studied_per_day):
             studied_per_day[date_key] = 0.0
         studied_per_day[date_key] += hours
 
-        if (today - date).days == 0:
+        if (today - date_).days == 0:
             studied_today += hours
 
         subjects[subject]['hours'] += hours
@@ -119,20 +119,20 @@ def parse(content: str, real_timings: bool) -> dict:
     for s in subjects:
         subjects[s]['score'] /= subjects[s]['credits']
         if subjects[s]['due'] != None:
-            if (subjects[s]['due'] - datetime.now()).days < 0:
+            if (subjects[s]['due'] - date.today()).days < 0:
                 subjects[s]['score'] *= -1
             else:
-                first_study_day = min(map(lambda x: datetime.strptime(x['date'], "%d/%m/%Y"), filter(lambda x: x['subject'] == s, data['sessions'])))
+                first_study_day = min(map(lambda x: datetime.strptime(x['date'], "%d/%m/%Y").date(), filter(lambda x: x['subject'] == s, data['sessions'])))
                 occupied_before = len(list(filter(lambda x: x <= subjects[s]['due'] and x >= today, all_dates)))
                 days_to_exam = (subjects[s]['due'] - today).days + 1
-                free_days_to_exam = max(0, days_to_exam - occupied_before)
+                free_days_to_exam = max(1, days_to_exam - occupied_before)
                 # print(s, free_days_to_exam)
-                subjects[s]['score'] *= free_days_to_exam
+                subjects[s]['score'] *= log(free_days_to_exam)
         else:
             subjects[s]['score'] /= max_available_time
 
     studied_per_day = list(map(lambda x: (datetime.strptime(
-        x[0], "%d/%m/%Y"), x[1]), studied_per_day.items()))
+        x[0], "%d/%m/%Y").date(), x[1]), studied_per_day.items()))
 
     dates = list(map(lambda x: x[0], studied_per_day))
     min_date = min(dates + [today])
@@ -243,11 +243,11 @@ def add_study_time(file_path):
         confidence_idx = len(CONFIDENCE_LEVELS)-1
         print(f"ERROR: Index out of bounds, going with {confidence_idx}")
 
-    date = datetime.strftime(datetime.today(), "%d/%m/%Y")
+    date_ = date.strftime(date.today(), "%d/%m/%Y")
 
     data['sessions'].append({
         'subject': subjects[idx-1],
-        'date': date,
+        'date': date_,
         'duration': amount,
         'confidence': CLEVELS_LIST[confidence_idx][0],
     })
@@ -303,9 +303,9 @@ def print_stats(file_path: str, real: bool = False):
     last_days_average = 0.0
     n_days = 1.0
     if len(parsed['daily']) > 0:
-        today = datetime.today()
+        today = date.today()
         studied_today = dict(map(lambda x: (x[0].strftime("%d/%m/%Y"), x[1]), parsed['daily']))[
-            datetime.today().strftime("%d/%m/%Y")]
+            date.today().strftime("%d/%m/%Y")]
         DAYS = 7
         last_days = list(
             filter(lambda x: (today - x[0]).days < DAYS, parsed['daily']))
@@ -453,11 +453,11 @@ def record_time(file_path: str):
         confidence_idx = len(CONFIDENCE_LEVELS)-1
         print(f"ERROR: Index out of bounds, going with {confidence_idx}")
 
-    date = datetime.strftime(datetime.today(), "%d/%m/%Y")
+    date_ = date.strftime(date.today(), "%d/%m/%Y")
 
     data['sessions'].append({
         'subject': subjects[idx-1],
-        'date': date,
+        'date': date_,
         'duration': amount,
         'confidence': CLEVELS_LIST[confidence_idx][0],
     })
