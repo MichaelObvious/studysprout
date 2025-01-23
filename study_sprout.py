@@ -522,10 +522,10 @@ def print_history(file_path: str, n: int, real: bool = False):
         progress_bar = "[\033[0m" + "="*n_chars + \
             "\033[0m" + " "*(BAR_LENGTH-n_chars) + "]"
         print(f"  {wd.ljust(max_wd_len)} {d.ljust(max_d_len)}: {
-              progress_bar}  {ft} ({dt.rjust(max_dt_len)})")
+              progress_bar}  {dt.rjust(max_dt_len)}h ({ft})")
     print()
     per_day_average = mean(map(lambda x: x[1], days))
-    print(f"  Average over period: {per_day_average:.2f} h/day")
+    print(f"  Average over period: {format_time(per_day_average)} h/day")
     print()
 
 
