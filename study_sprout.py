@@ -1,5 +1,6 @@
 #!/usr/bin/python3
 from math import exp, floor, log, log10, ceil
+from statistics import mean
 import sys
 from datetime import datetime, timedelta, date
 import json
@@ -172,6 +173,9 @@ def bold(s: str) -> str:
     return f"\033[1m{s}\033[0m"
 
 
+def gray(s: str) -> str:
+    return f"\033[90m{s}\033[0m"
+
 def format_time(t: float, show_secs: bool = False) -> str:
     mins = (t-floor(t)) * 60
     if show_secs:
@@ -281,7 +285,9 @@ def print_stats(file_path: str, real: bool = False):
     display_power = 2 if (max_score - min_score) < 0.75 else 1
 
     print("  \033[1m=== Subjects ===\033[0m")
-    for (sub, sc) in scores:
+    positive_scores = filter(lambda x: x[1] >= 0.0, scores)
+    negative_scores = list(filter(lambda x: x[1] < 0.0, scores))
+    for (sub, sc) in positive_scores:
         if sc < 0:
             continue
         h = parsed['subjects'][sub]['hours']
@@ -291,10 +297,26 @@ def print_stats(file_path: str, real: bool = False):
         n_chars = round(
             ((sc - interval_min) / (interval_max-interval_min))**display_power * BAR_LENGTH)
         # to_print = f"\033[7m\033[1m{to_print[:n_chars]}\033[0m{to_print[n_chars:]}\033[0m"
-        progress_bar = "[\033[0m" + "="*n_chars + \
-            "\033[0m" + " "*(BAR_LENGTH-n_chars) + "]"
+        progress_bar = "[" + "="*n_chars \
+            + " "*(BAR_LENGTH-n_chars) + "]"
         to_print = f"  {sub} {hours}    {progress_bar} {sc_str}"
         print(to_print)
+    if len(negative_scores) > 0:
+        print(gray("  ---"))
+        for (sub, sc) in negative_scores:
+            if sc < 0:
+                continue
+            h = parsed['subjects'][sub]['hours']
+            hours = f"{h:.2f}h".ljust(max_hours_digits+1)
+            sub = (sub + ": ").ljust(max_len+5, '.')
+            sc_str = f"{sc:.2f}".ljust(4, '0')
+            n_chars = round(
+                ((sc - interval_min) / (interval_max-interval_min))**display_power * BAR_LENGTH)
+            # to_print = f"\033[7m\033[1m{to_print[:n_chars]}\033[0m{to_print[n_chars:]}\033[0m"
+            progress_bar = "[" + "="*n_chars \
+                + " "*(BAR_LENGTH-n_chars) + "]"
+            to_print = gray(f"  {sub} {hours}    {progress_bar} {sc_str}")
+            print(to_print)
 
     print()
     print("  \033[1m=== Time ===\033[0m")
@@ -475,23 +497,36 @@ def print_history(file_path: str, n: int, real: bool = False):
     content = slurp_file(file_path)
     # data = json.loads(content)
     parsed = parse(content, real)
+    
+    print()
+    n = min(max(n, 0), len(parsed['daily']))
+    period_str = ('full: ' if n >= len(parsed['daily']) else '') + f'last {n} day' + ('s' if n != 1 else '')
+    print(f"  \033[1m=== History ({italic(period_str)}) ===\033[0m")
+    
+    if n == 0:
+        print()
+        return
 
     start_idx = max(len(parsed['daily']) - n, 0)
     days = parsed['daily'][start_idx:]
     max_t = max(map(lambda x: x[1], days))
-    days = list(map(lambda x: (x[0].strftime("%A"), x[0].strftime(
+    days_parsed = list(map(lambda x: (x[0].strftime("%A"), x[0].strftime(
         "%d/%m"), format_time(x[1]), f"{x[1]:.2f}", x[1]), days))
-    max_wd_len = max(map(lambda x: len(x[0]), days))
-    max_d_len = max(map(lambda x: len(x[1]), days))
-    max_dt_len = max(map(lambda x: len(x[3]), days))
-    for wd, d, ft, dt, t in days:
+    max_wd_len = max(map(lambda x: len(x[0]), days_parsed))
+    max_d_len = max(map(lambda x: len(x[1]), days_parsed))
+    max_dt_len = max(map(lambda x: len(x[3]), days_parsed))
+    for wd, d, ft, dt, t in days_parsed:
         n_chars = round(
             (t / max_t) * BAR_LENGTH)
         # to_print = f"\033[7m\033[1m{to_print[:n_chars]}\033[0m{to_print[n_chars:]}\033[0m"
         progress_bar = "[\033[0m" + "="*n_chars + \
             "\033[0m" + " "*(BAR_LENGTH-n_chars) + "]"
-        print(f"{wd.ljust(max_wd_len)} {d.ljust(max_d_len)}: {
+        print(f"  {wd.ljust(max_wd_len)} {d.ljust(max_d_len)}: {
               progress_bar}  {ft} ({dt.rjust(max_dt_len)})")
+    print()
+    per_day_average = mean(map(lambda x: x[1], days))
+    print(f"  Average over period: {per_day_average:.2f} h/day")
+    print()
 
 
 
