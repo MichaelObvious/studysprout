@@ -153,13 +153,14 @@ def get_next_subject(subjects: dict) -> str:
     return lowest[0]
 
 
-def calc_scores(subjects: dict) -> list:
+def normalize_scores(subjects: dict) -> list:
     scores = list(map(lambda x: (x[0], x[1]['score']), subjects.items()))
-    max_score = max(map(lambda x: x[1], scores))
+    max_score = max(max(map(lambda x: x[1], scores)), 1e-6)
+    max_neg_score = max(-min(map(lambda x: x[1], scores)), 1e-6)
     if max_score == 0:
         max_score = 1
     # avg_score = sum(map(lambda x: x[1], scores)) / len(items)
-    scores = list(map(lambda x: (x[0], x[1]/max_score), scores))
+    scores = list(map(lambda x: (x[0], x[1]/max_score if x[1] >= 0 else x[1]/max_neg_score), scores))
     scores = sorted(scores, key=lambda x: x[1], reverse=True)
     return scores
     # print("\n".join(map(lambda x: f" - {x[0].ljust(max_len)}: {x[1]/max_score:.2f}", scores)))
@@ -272,7 +273,7 @@ def print_stats(file_path: str, real: bool = False):
     print()
     content = slurp_file(file_path)
     parsed = parse(content, real)
-    scores = sorted(calc_scores(parsed['subjects']), key=lambda x: x[1])
+    scores = sorted(normalize_scores(parsed['subjects']), key=lambda x: x[1])
 
     max_len = max(map(lambda x: len(x[0]), scores))
     max_hours = max(map(lambda x: x[1]['hours'], parsed['subjects'].items()))
@@ -384,6 +385,8 @@ def record_time(file_path: str):
         to_print = ""
         if s == suggested:
             to_print = bold(f"  {i+1}) {italic(s)}")
+        elif parsed['subjects'][s]['score'] < 0.0:
+            to_print = gray(f"  {i+1}) {s}")
         else:
             to_print = f"  {i+1}) {s}"
         print(to_print)
@@ -522,11 +525,8 @@ def print_history(file_path: str, n: int, real: bool = False):
               progress_bar}  {dt.rjust(max_dt_len)}h ({ft})")
     print()
     per_day_average = mean(map(lambda x: x[1], days))
-    print(f"  Average over period: {format_time(per_day_average)} h/day")
+    print(f"  {bold('Average over period')}: {' '*(BAR_LENGTH-1)}{per_day_average:.2f}h/d ({format_time(per_day_average)})")
     print()
-
-
-
 
 
 def main():
