@@ -149,7 +149,7 @@ def parse(content: str, real_timings: bool) -> dict:
 
 
 def get_next_subject(subjects: dict) -> str:
-    lowest = min(subjects.items(), key=lambda x: x[1]['score'])
+    lowest = min(filter(lambda x: x[1]['score'] > 0, subjects.items()), key=lambda x: x[1]['score'])
     return lowest[0]
 
 
@@ -288,8 +288,6 @@ def print_stats(file_path: str, real: bool = False):
     positive_scores = filter(lambda x: x[1] >= 0.0, scores)
     negative_scores = list(filter(lambda x: x[1] < 0.0, scores))
     for (sub, sc) in positive_scores:
-        if sc < 0:
-            continue
         h = parsed['subjects'][sub]['hours']
         hours = f"{h:.2f}h".ljust(max_hours_digits+1)
         sub = (sub + ": ").ljust(max_len+5, '.')
@@ -304,8 +302,7 @@ def print_stats(file_path: str, real: bool = False):
     if len(negative_scores) > 0:
         print(gray("  ---"))
         for (sub, sc) in negative_scores:
-            if sc < 0:
-                continue
+            sc = -sc
             h = parsed['subjects'][sub]['hours']
             hours = f"{h:.2f}h".ljust(max_hours_digits+1)
             sub = (sub + ": ").ljust(max_len+5, '.')
