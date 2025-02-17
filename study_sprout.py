@@ -149,7 +149,7 @@ def parse(content: str, real_timings: bool) -> dict:
 
 
 def get_next_subject(subjects: dict) -> str:
-    lowest = min(filter(lambda x: x[1]['score'] > 0, subjects.items()), key=lambda x: x[1]['score'])
+    lowest = min(filter(lambda x: x[1]['score'] >= 0, subjects.items()), key=lambda x: x[1]['score'])
     return lowest[0]
 
 
@@ -517,7 +517,7 @@ def print_history(file_path: str, n: int, real: bool = False):
     max_dt_len = max(map(lambda x: len(x[3]), days_parsed))
     for wd, d, ft, dt, t in days_parsed:
         n_chars = round(
-            (t / max_t) * BAR_LENGTH)
+            (t / max(max_t, 1e-9)) * BAR_LENGTH)
         # to_print = f"\033[7m\033[1m{to_print[:n_chars]}\033[0m{to_print[n_chars:]}\033[0m"
         progress_bar = "[\033[0m" + "="*n_chars + \
             "\033[0m" + " "*(BAR_LENGTH-n_chars) + "]"
