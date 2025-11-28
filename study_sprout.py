@@ -1,6 +1,6 @@
 #!/usr/bin/python3
-from math import exp, floor, log, log10, ceil
-from statistics import mean
+from math import atan, exp, floor, log, log10, ceil, pi
+from statistics import mean, median, stdev
 import sys
 from datetime import datetime, timedelta, date
 import json
@@ -26,6 +26,9 @@ def print_help(program: str):
     print("    stats         Print some statistics")
     print("    record        Record study session duration")
 
+
+def get_today() -> date:
+    return (datetime.now() - timedelta(hours=4)).date()
 
 def lev(s1: str, s2: str) -> int:
     if len(s1) < len(s2):
@@ -77,16 +80,29 @@ def parse_date_or_none(s: str) -> date:
     return d
 
 
+ease = lambda x: ((4*max(atan(x-1), 0.0)**2)/(pi*pi))*0.333 + 0.667
+def score_calculation(s: dict) -> float:
+    if 'available_time' in s and s['available_time'] >= 1:
+        return s['scored_hours'] * ease(s['available_time']) / s['hours_per_unit']
+    else:
+        return s['scored_hours'] * 1 / s['hours_per_unit']
+
+def inverse_score_calculation(s: dict, score: float) -> float:
+    if 'available_time' in s and s['available_time'] > 1:
+        return score * s['hours_per_unit'] / ease(s['available_time'])
+    else:
+        return score * s['hours_per_unit'] / 1
+
 def parse(content: str, real_timings: bool) -> dict:
     data = json.loads(content)
 
     studied_per_day = {}
-    today = date.today()
+    today = get_today()
     studied_today = 0.0
     total = 0.0
 
     subjects = dict(map(lambda x: (
-        x[0], {'credits': x[1]['weight'], 'due': parse_date_or_none(x[1]['due']), 'hours': 0, 'score': 0}), data['subjects'].items()))
+        x[0], {'credits': x[1]['weight'], 'due': parse_date_or_none(x[1]['due']), 'hours': 0, 'score': 0, 'scored_hours': 0}), data['subjects'].items()))
 
     first_date = date.fromtimestamp(100_000_000_000)
     for session in data['sessions']:
@@ -98,39 +114,49 @@ def parse(content: str, real_timings: bool) -> dict:
         hours = session['duration']
         orig_hours = hours
         confidence = CONFIDENCE_LEVELS[session['confidence']]
-        if not real_timings:
-            hours *= confidence
-        total += hours
+        if confidence == 0:
+            orig_hours = 0
+        total += orig_hours
+        # if not real_timings:
+        #     hours *= confidence
         # if confidence == 0.0:
         #     hours = 0.0
 
         date_key = date_.strftime("%d/%m/%Y")
         if not (date_key in studied_per_day):
             studied_per_day[date_key] = 0.0
-        studied_per_day[date_key] += hours
+        studied_per_day[date_key] += orig_hours
 
         if (today - date_).days == 0:
-            studied_today += hours
+            studied_today += orig_hours
 
-        subjects[subject]['hours'] += hours
-        subjects[subject]['score'] += orig_hours * confidence
+        if subject in subjects:
+            subjects[subject]['hours'] += orig_hours
+            if 'scored_hours' not in subjects[subject].keys():
+                subjects[subject]['scored_hours'] = 0.0
+            subjects[subject]['scored_hours'] += orig_hours * confidence
 
     max_available_time = max([1] + list(map(lambda x: (x-first_date).days + 1, filter(lambda x: x != None, map(lambda x: x['due'], subjects.values())))))
     all_dates = list(map(lambda x: x['due'], subjects.values()))
+    min_credits = min(map(lambda x: x['credits'], subjects.values()))
     for s in subjects:
-        subjects[s]['score'] /= subjects[s]['credits']
+        subjects[s]['hours_per_unit'] = (subjects[s]['credits'] + min_credits)
         if subjects[s]['due'] != None:
-            if (subjects[s]['due'] - date.today()).days < 0:
-                subjects[s]['score'] *= -1
+            if (subjects[s]['due'] - get_today()).days < 0:
+                subjects[s]['hours_per_unit'] *= -1
             else:
-                first_study_day = min(map(lambda x: datetime.strptime(x['date'], "%d/%m/%Y").date(), filter(lambda x: x['subject'] == s, data['sessions'])))
-                occupied_before = len(list(filter(lambda x: x <= subjects[s]['due'] and x >= today, all_dates)))
+                occupied_before = len(list(filter(lambda x: x is not None and x <= subjects[s]['due'] and x >= today, all_dates)))
                 days_to_exam = (subjects[s]['due'] - today).days + 1
                 free_days_to_exam = max(1, days_to_exam - occupied_before)
                 # print(s, free_days_to_exam)
-                subjects[s]['score'] *= log(free_days_to_exam)
+                subjects[s]['available_time'] = free_days_to_exam
         else:
-            subjects[s]['score'] /= max_available_time
+            subjects[s]['available_time'] = max_available_time
+        subjects[s]['score'] = score_calculation(subjects[s])
+
+    max_score = max(map(lambda x: x['score'], subjects.values()))
+    for s in subjects.keys():
+        subjects[s]['to_get_to_max'] = inverse_score_calculation(subjects[s], max_score-subjects[s]['score'])
 
     studied_per_day = list(map(lambda x: (datetime.strptime(
         x[0], "%d/%m/%Y").date(), x[1]), studied_per_day.items()))
@@ -176,6 +202,16 @@ def bold(s: str) -> str:
 
 def gray(s: str) -> str:
     return f"\033[90m{s}\033[0m"
+
+def red(s: str) -> str:
+    return f"\033[31m{s}\033[0m"
+
+def orange(s: str) -> str:
+    # ANSI doesn't have a standard orange, but 38;5;208 is a good approximation
+    return f"\033[38;5;208m{s}\033[0m"
+
+def green(s: str) -> str:
+    return f"\033[32m{s}\033[0m"
 
 def format_time(t: float, show_secs: bool = False) -> str:
     mins = (t-floor(t)) * 60
@@ -248,7 +284,7 @@ def add_study_time(file_path):
         confidence_idx = len(CONFIDENCE_LEVELS)-1
         print(f"ERROR: Index out of bounds, going with {confidence_idx}")
 
-    date_ = date.strftime(date.today(), "%d/%m/%Y")
+    date_ = date.strftime(get_today(), "%d/%m/%Y")
 
     data['sessions'].append({
         'subject': subjects[idx-1],
@@ -283,22 +319,50 @@ def print_stats(file_path: str, real: bool = False):
     max_score = max(dict(scores).values())
     padding = (1.0 - min_score) / 10.0
     (interval_min, interval_max) = (0, 1)  # (min_score-padding, 1.0)
-    display_power = 2 if (max_score - min_score) < 0.75 else 1
+    display_power = (4 if (max_score - min_score) < 0.1
+        else (
+            3 if (max_score - min_score) < 0.25
+            else (
+                2 if (max_score - min_score) < 0.5
+                else 1
+    )))
 
     print("  \033[1m=== Subjects ===\033[0m")
-    positive_scores = filter(lambda x: x[1] >= 0.0, scores)
+    positive_scores = list(filter(lambda x: x[1] >= 0.0, scores))
     negative_scores = list(filter(lambda x: x[1] < 0.0, scores))
     for (sub, sc) in positive_scores:
         h = parsed['subjects'][sub]['hours']
         hours = f"{h:.2f}h".ljust(max_hours_digits+1)
-        sub = (sub + ": ").ljust(max_len+5, '.')
+        sub_string = (sub + ": ").ljust(max_len+5, '.')
         sc_str = f"{sc:.2f}".ljust(4, '0')
         n_chars = round(
             ((sc - interval_min) / (interval_max-interval_min))**display_power * BAR_LENGTH)
         # to_print = f"\033[7m\033[1m{to_print[:n_chars]}\033[0m{to_print[n_chars:]}\033[0m"
         progress_bar = "[" + "="*n_chars \
             + " "*(BAR_LENGTH-n_chars) + "]"
-        to_print = f"  {sub} {hours}    {progress_bar} {sc_str}"
+        to_print = f"  {sub_string} {hours}    {progress_bar}"
+        if parsed['subjects'][sub]['to_get_to_max'] > 1/60-1e-6:
+            to_get_to_max = parsed['subjects'][sub]['to_get_to_max']
+            to_max_str = f" -{format_time(to_get_to_max)}"
+            # if to_get_to_max < (10.5/60):
+            #     pass
+            # elif to_get_to_max < (30.5/60):
+            #     to_max_str = green(to_max_str)
+            # elif to_get_to_max < (90.5/60):
+            #     to_max_str = orange(to_max_str)
+            # else:
+            #     to_max_str = red(to_max_str)
+            to_print += to_max_str
+        # if sub == positive_scores[0][0]:
+        #     to_get_to_max = parsed['subjects'][sub]['to_get_to_max']
+        #     if to_get_to_max < (10.5/60):
+        #         pass
+        #     elif to_get_to_max < (30.5/60):
+        #         to_print = green(to_print)
+        #     elif to_get_to_max < (90.5/60):
+        #         to_print = orange(to_print)
+        #     else:
+        #         to_print = red(to_print)
         print(to_print)
     if len(negative_scores) > 0:
         print(gray("  ---"))
@@ -323,20 +387,25 @@ def print_stats(file_path: str, real: bool = False):
     last_days_average = 0.0
     n_days = 1.0
     if len(parsed['daily']) > 0:
-        today = date.today()
+        today = get_today()
         studied_today = dict(map(lambda x: (x[0].strftime("%d/%m/%Y"), x[1]), parsed['daily']))[
-            date.today().strftime("%d/%m/%Y")]
+            get_today().strftime("%d/%m/%Y")]
         DAYS = 7
         last_days = list(
             filter(lambda x: (today - x[0]).days < DAYS, parsed['daily']))
         n_days = (today - last_days[0][0]).days + 1
         last_days_hours = sum(map(lambda x: x[1], last_days))
-        last_days_average = last_days_hours / n_days
+        last_days_average = mean(map(lambda x: x[1], last_days))
+        last_days_median = median(map(lambda x: x[1], last_days))
 
     stats = [
         ("Studied in total", parsed['total']),
         (f"Last {str(n_days) + ' ' if n_days > 1 else ''}day{'s' if n_days >
+         1 else ''} in total", last_days_hours),
+        (f"Last {str(n_days) + ' ' if n_days > 1 else ''}day{'s' if n_days >
          1 else ''} average", last_days_average),
+        (f"Last {str(n_days) + ' ' if n_days > 1 else ''}day{'s' if n_days >
+         1 else ''} median", last_days_median),
         ("Today", studied_today),
     ]
     max_title_len = max(map(lambda x: len(x[0]), stats))
@@ -345,7 +414,7 @@ def print_stats(file_path: str, real: bool = False):
     for (title, amount) in stats:
         stitle = (title+":").ljust(max_title_len + 1)
         samount = f"{amount:.2f}".rjust(max_hours_digits)
-        hamount = format_time(amount).ljust(max_hours_digits)
+        hamount = format_time(amount).rjust(max_hours_digits)
         print(f"  {stitle} {hamount} ({samount})")
     print()
 
@@ -354,7 +423,7 @@ recording_paused = False
 recording = True
 
 
-def update_prompt():
+def update_prompt(subject: str):
     recorded_studied_time = 0.0
     was_recording_paused = recording_paused
     last_t = time()
@@ -369,7 +438,7 @@ def update_prompt():
             was_recording_paused = recording_paused
             back = '\033[F'
         sys.stdout.write(f"{back}\033[K{format_time(recorded_studied_time/3600.0, show_secs=True)
-                                        } [press enter to {'resume' if recording_paused else 'pause'}]")
+                                        } ({bold(subject)}) [press enter to {'resume' if recording_paused else 'pause'}]")
         sys.stdout.flush()
         sleep(0.1)
 
@@ -411,7 +480,7 @@ def record_time(file_path: str):
     global recording_paused
     # pause_start = 0
     # pause_time = 0.0
-    thread = threading.Thread(target=update_prompt)
+    thread = threading.Thread(target=update_prompt, args=[subjects[idx-1]])
     thread.start()
     while True:
         try:
@@ -475,7 +544,7 @@ def record_time(file_path: str):
         confidence_idx = len(CONFIDENCE_LEVELS)-1
         print(f"ERROR: Index out of bounds, going with {confidence_idx}")
 
-    date_ = date.strftime(date.today(), "%d/%m/%Y")
+    date_ = date.strftime(get_today(), "%d/%m/%Y")
 
     data['sessions'].append({
         'subject': subjects[idx-1],
@@ -497,12 +566,11 @@ def print_history(file_path: str, n: int, real: bool = False):
     content = slurp_file(file_path)
     # data = json.loads(content)
     parsed = parse(content, real)
-    
+
     print()
     n = min(max(n, 0), len(parsed['daily']))
-    period_str = ('full: ' if n >= len(parsed['daily']) else '') + f'last {n} day' + ('s' if n != 1 else '')
-    print(f"  \033[1m=== History ({italic(period_str)}) ===\033[0m")
-    
+    print(f"  \033[1m=== History ===\033[0m")
+
     if n == 0:
         print()
         return
@@ -524,9 +592,40 @@ def print_history(file_path: str, n: int, real: bool = False):
         print(f"  {wd.ljust(max_wd_len)} {d.ljust(max_d_len)}: {
               progress_bar}  {dt.rjust(max_dt_len)}h ({ft})")
     print()
+    total = sum(map(lambda x: x[1], days))
     per_day_average = mean(map(lambda x: x[1], days))
-    print(f"  {bold('Average over period')}: {' '*(BAR_LENGTH-1)}{per_day_average:.2f}h/d ({format_time(per_day_average)})")
+    per_working_day_average = mean(filter(lambda x: x > 0.0, map(lambda x: x[1], days)))
+    per_day_median = median(map(lambda x: x[1], days))
+    per_working_day_median = median(filter(lambda x: x > 0.0, map(lambda x: x[1], days)))
+    n_days = len(days)
+    n_work_days = len(list(filter(lambda x: x[1] > 0.0, days)))
+    print(f"  {bold("Work days")}:                  {' '*(BAR_LENGTH-6)}{n_work_days} ({n_work_days*100.0/n_days:.2f}%)")
+    print(f"  {bold("Total days")}:                 {' '*(BAR_LENGTH-6)}{n_days}")
+    print(f"  ---")
+    print(f"  {bold('Total over period')}:          {' '*(BAR_LENGTH-6)}{total                  :5.2f}h   ({format_time(total)})")
+    print(f"  {bold('Average over period')}:        {' '*(BAR_LENGTH-6)}{per_day_average        :5.2f}h/d ({format_time(per_day_average)})")
+    print(f"  {bold(' Average over working days')}: {' '*(BAR_LENGTH-6)}{per_working_day_average:5.2f}h/d ({format_time(per_working_day_average)})")
+    print(f"  {bold('Median over period')}:         {' '*(BAR_LENGTH-6)}{per_day_median        :5.2f}h/d ({format_time(per_day_median)})")
+    print(f"  {bold(' Median over working days')}:  {' '*(BAR_LENGTH-6)}{per_working_day_median:5.2f}h/d ({format_time(per_working_day_median)})")
     print()
+    # print()
+    # durations = list(filter(lambda x: x > 0.0, map(lambda x: x[1], days)))
+    # INTERVAL_SIZE = 5/60
+    # print(bold(f"  === Distribution ({mean(durations):.2f}h, {stdev(durations):.2f}h) ==="))
+    # distribution = [0] * (round(max_t / INTERVAL_SIZE) + 1)
+    # for d in durations:
+    #     distribution[round(d / INTERVAL_SIZE)] += 1
+    # GRAPH_HEIGHT = 7
+
+    # columns_sizes = [0] * len(distribution)
+    # max_distrib = max(distribution)
+    # for i in range(len(distribution)):
+    #     columns_sizes[i] = round(distribution[i] * GRAPH_HEIGHT / max_distrib)
+
+    # for i in range(GRAPH_HEIGHT):
+    #     print(''.join(map(lambda x: '*' if GRAPH_HEIGHT - i <= x else ' ', columns_sizes)))
+    # print('-'*len(columns_sizes))
+
 
 
 def main():
@@ -543,9 +642,9 @@ def main():
     option = "next"
     if len(argv) > 0:
         option, argv = shift(argv)
-        
+
     print(bold(f"===== {datetime.now().strftime('%d/%m/%y - %H:%M')} ====="))
-    
+
     subcommands = ["add", "help", "history", "next", "record", "stats"]
 
     match option:
@@ -567,7 +666,7 @@ def main():
             print_help(program)
         case sc:
             xs = list(sorted(filter(lambda x: x[1] < min(map(len, subcommands)), map(lambda x: (x, lev(sc, x)), subcommands)), key=lambda x: x[1]))
-            
+
             print(f"ERROR: Unknown subcommand `{sc}`."
                   + (f" Maybe you meant `{italic(xs[0][0])}`?" if len(xs) > 0 else "")
             )
