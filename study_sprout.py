@@ -108,6 +108,9 @@ def parse(content: str, real_timings: bool) -> dict:
     for session in data['sessions']:
         subject = session['subject']
         date_ = datetime.strptime(session['date'], "%d/%m/%Y").date()
+        
+        if date_ > today:
+            continue
 
         first_date = min(date_, first_date)
 
