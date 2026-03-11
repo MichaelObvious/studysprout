@@ -84,12 +84,9 @@ ease = lambda x: ((4*max(atan(x-1), 0.0)**2)/(2*pi))
 def score_calculation(s: dict) -> float:
     print(s)
     if 'available_time' in s and s['available_time'] >= 1:
-        score = s['scored_hours'] * ease(s['available_time']) / s['hours_per_unit']
-        print("A", score)
+        return s['scored_hours'] * ease(s['available_time']) / s['hours_per_unit']
     else:
-        score = s['scored_hours'] * 1 / s['hours_per_unit']
-        print(score)
-    return score
+        return s['scored_hours'] * 1 / s['hours_per_unit']
 
 def inverse_score_calculation(s: dict, score: float) -> float:
     if 'available_time' in s and s['available_time'] > 1:
