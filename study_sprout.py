@@ -80,12 +80,16 @@ def parse_date_or_none(s: str) -> date:
     return d
 
 
-ease = lambda x: ((4*max(atan(x-1), 0.0)**2)/(pi*pi))*0.333 + 0.667
+ease = lambda x: ((4*max(atan(x-1), 0.0)**2)/(2*pi))
 def score_calculation(s: dict) -> float:
+    print(s)
     if 'available_time' in s and s['available_time'] >= 1:
-        return s['scored_hours'] * ease(s['available_time']) / s['hours_per_unit']
+        score = s['scored_hours'] * ease(s['available_time']) / s['hours_per_unit']
+        print("A", score)
     else:
-        return s['scored_hours'] * 1 / s['hours_per_unit']
+        score = s['scored_hours'] * 1 / s['hours_per_unit']
+        print(score)
+    return score
 
 def inverse_score_calculation(s: dict, score: float) -> float:
     if 'available_time' in s and s['available_time'] > 1:
