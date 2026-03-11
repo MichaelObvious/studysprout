@@ -82,7 +82,6 @@ def parse_date_or_none(s: str) -> date:
 
 ease = lambda x: ((4*max(atan(x-1), 0.0)**2)/(2*pi))
 def score_calculation(s: dict) -> float:
-    print(s)
     if 'available_time' in s and s['available_time'] >= 1:
         return s['scored_hours'] * ease(s['available_time']) / s['hours_per_unit']
     else:
