@@ -436,7 +436,8 @@ def update_prompt(subject: str):
             recorded_studied_time += (curr_t-last_t)
         last_t = curr_t
         # Clear the current line and print the new prompt
-        back = '\r'
+        # back = '\r'
+        back = "\033[2J" + "\033[0;0H"
         if was_recording_paused != recording_paused:
             was_recording_paused = recording_paused
             back = '\033[F'
