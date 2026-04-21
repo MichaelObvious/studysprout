@@ -141,7 +141,7 @@ def parse(content: str, real_timings: bool) -> dict:
 
     max_available_time = max([1] + list(map(lambda x: (x-first_date).days + 1, filter(lambda x: x != None, map(lambda x: x['due'], subjects.values())))))
     all_dates = list(map(lambda x: x['due'], subjects.values()))
-    min_credits = min(map(lambda x: x['credits'], subjects.values()))
+    min_credits = min(map(lambda x: x['credits'], filter(lambda x:x['due'] <= today,  subjects.values())))
     for s in subjects:
         subjects[s]['hours_per_unit'] = (subjects[s]['credits'] + min_credits)
         if subjects[s]['due'] != None:
@@ -562,7 +562,7 @@ def record_time(file_path: str):
 
     print()
     print("Successfully added study session!")
-    print(f"Studied {format_time(
+    print(f"[{datetime.now().strftime('%H:%M')}] Studied {format_time(
         parsed['today'] + amount*CLEVELS_LIST[confidence_idx][1])} today!")
 
 
