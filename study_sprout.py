@@ -141,7 +141,7 @@ def parse(content: str, real_timings: bool) -> dict:
 
     max_available_time = max([1] + list(map(lambda x: (x-first_date).days + 1, filter(lambda x: x != None, map(lambda x: x['due'], subjects.values())))))
     all_dates = list(map(lambda x: x['due'], subjects.values()))
-    min_credits = min(map(lambda x: x['credits'], filter(lambda x:x['due'] <= today,  subjects.values())))
+    min_credits = min(map(lambda x: x['credits'], subjects.values()))
     for s in subjects:
         subjects[s]['hours_per_unit'] = (subjects[s]['credits'] + min_credits)
         if subjects[s]['due'] != None:
@@ -156,11 +156,15 @@ def parse(content: str, real_timings: bool) -> dict:
         else:
             subjects[s]['available_time'] = max_available_time
         subjects[s]['score'] = score_calculation(subjects[s])
+        subjects[s]['study_time_multiplier'] = inverse_score_calculation(subjects[s], 1)
 
     max_score = max(map(lambda x: x['score'], subjects.values()))
     for s in subjects.keys():
         subjects[s]['to_get_to_max'] = inverse_score_calculation(subjects[s], max_score-subjects[s]['score'])
 
+    max_multiplier = max(map(lambda x: x['study_time_multiplier'], subjects.values()))
+    for s in subjects.keys():
+        subjects[s]['study_time_multiplier'] /= max_multiplier
     studied_per_day = list(map(lambda x: (datetime.strptime(
         x[0], "%d/%m/%Y").date(), x[1]), studied_per_day.items()))
 
@@ -334,6 +338,7 @@ def print_stats(file_path: str, real: bool = False):
     positive_scores = list(filter(lambda x: x[1] >= 0.0, scores))
     negative_scores = list(filter(lambda x: x[1] < 0.0, scores))
     for (sub, sc) in positive_scores:
+        multiplier = f"{parsed['subjects'][sub]['study_time_multiplier']:.1f}x"
         h = parsed['subjects'][sub]['hours']
         hours = f"{h:.2f}h".ljust(max_hours_digits+1)
         sub_string = (sub + ": ").ljust(max_len+5, '.')
@@ -343,7 +348,7 @@ def print_stats(file_path: str, real: bool = False):
         # to_print = f"\033[7m\033[1m{to_print[:n_chars]}\033[0m{to_print[n_chars:]}\033[0m"
         progress_bar = "[" + "="*n_chars \
             + " "*(BAR_LENGTH-n_chars) + "]"
-        to_print = f"  {sub_string} {hours}    {progress_bar}"
+        to_print = f"  ({multiplier}) {sub_string} {hours}    {progress_bar}"
         if parsed['subjects'][sub]['to_get_to_max'] > 1/60-1e-6:
             to_get_to_max = parsed['subjects'][sub]['to_get_to_max']
             to_max_str = f" -{format_time(to_get_to_max)}"
